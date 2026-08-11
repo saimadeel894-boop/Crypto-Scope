@@ -13,13 +13,13 @@ const DEX_ABI = [
 ];
 
 export class ThetaDexService {
-    private provider: ethers.providers.JsonRpcProvider;
+    private provider: ethers.JsonRpcProvider;
     private dexContract: ethers.Contract;
     private pollInterval: NodeJS.Timeout | null = null;
 
     constructor() {
         // Connect to ThetaChain mainnet via HTTP
-        this.provider = new ethers.providers.JsonRpcProvider('https://eth-rpc-api.thetatoken.org/rpc');
+        this.provider = new ethers.JsonRpcProvider('https://eth-rpc-api.thetatoken.org/rpc');
         this.dexContract = new ethers.Contract(DEX_CONTRACT_ADDRESS, DEX_ABI, this.provider);
     }
 
@@ -31,8 +31,8 @@ export class ThetaDexService {
             const token0 = await this.dexContract.token0();
             console.log('Token0:', token0);
             // Calculate price based on reserves
-            const reserve0 = ethers.utils.formatUnits(reserves.reserve0, 18);
-            const reserve1 = ethers.utils.formatUnits(reserves.reserve1, 18);
+            const reserve0 = ethers.formatUnits(reserves.reserve0, 18);
+            const reserve1 = ethers.formatUnits(reserves.reserve1, 18);
             if (token0.toLowerCase() === TOKEN_ADDRESS.toLowerCase()) {
                 return Number(reserve1) / Number(reserve0);
             } else {

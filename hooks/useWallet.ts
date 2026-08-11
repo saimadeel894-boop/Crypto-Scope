@@ -1,14 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { ethers, BrowserProvider, formatEther } from 'ethers';
 
 declare global {
   interface Window {
-    ethereum?: {
-      isMetaMask: boolean;
-      request: (args: { method: string; params?: any[] }) => Promise<any>;
-      on: (event: string, callback: (params: any) => void) => void;
-      removeListener: (event: string, callback: (params: any) => void) => void;
-      networkVersion: string;
-    };
+    ethereum?: any;
   }
 }
 
@@ -26,13 +21,15 @@ export const useWallet = () => {
   const [network, setNetwork] = useState<NetworkInfo | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
-  const getNetworkInfo = async (chainId: string): Promise<NetworkInfo> => {
+  const getNetworkInfo = (chainIdBigInt: bigint | string): NetworkInfo => {
+    const chainId = chainIdBigInt.toString();
     const networks: { [key: string]: string } = {
       '1': 'Ethereum Mainnet',
       '5': 'Goerli Testnet',
       '11155111': 'Sepolia Testnet',
       '137': 'Polygon Mainnet',
       '80001': 'Mumbai Testnet',
+      '361': 'Theta Mainnet',
     };
     return {
       chainId,
@@ -40,70 +37,77 @@ export const useWallet = () => {
     };
   };
 
-  const updateBalance = async (address: string) => {
-    if (!window.ethereum) return;
+  const sendWalletToBackend = async (walletAddress: string) => {
     try {
-      const balance = await window.ethereum.request({
-        method: 'eth_getBalance',
-        params: [address, 'latest'],
+      const response = await fetch('/api/wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: walletAddress }),
       });
-      // Convert from wei to ETH
-      const ethBalance = (parseInt(balance, 16) / 1e18).toFixed(4);
-      setBalance(ethBalance);
+      const data = await response.json();
+      if (!response.ok) {
+        console.warn('Backend API wallet response non-ok:', data);
+      } else {
+        console.log('Wallet address synced to backend DB:', data);
+      }
     } catch (err) {
-      console.error('Error fetching balance:', err);
+      console.error('Error sending wallet address to backend API:', err);
     }
   };
 
-  const updateNetwork = async () => {
+  const updateAccountData = useCallback(async (address: string) => {
     if (!window.ethereum) return;
     try {
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-      const networkInfo = await getNetworkInfo(chainId);
-      setNetwork(networkInfo);
+      const provider = new BrowserProvider(window.ethereum);
+      const balanceWei = await provider.getBalance(address);
+      setBalance(parseFloat(formatEther(balanceWei)).toFixed(4));
+
+      const networkObj = await provider.getNetwork();
+      setNetwork(getNetworkInfo(networkObj.chainId));
     } catch (err) {
-      console.error('Error fetching network:', err);
+      console.error('Error updating account data:', err);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    // Check if MetaMask is installed
-    setIsMetaMaskInstalled(!!window.ethereum?.isMetaMask);
+    const isInstalled = !!window.ethereum?.isMetaMask;
+    setIsMetaMaskInstalled(isInstalled);
 
-    // Check if already connected
     const checkConnection = async () => {
       if (window.ethereum) {
         try {
-          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-          if (accounts.length > 0) {
-            setAccount(accounts[0]);
-            updateBalance(accounts[0]);
-            updateNetwork();
+          const provider = new BrowserProvider(window.ethereum);
+          const accounts: string[] = await provider.send('eth_accounts', []);
+          if (accounts && accounts.length > 0) {
+            const currentAccount = accounts[0];
+            setAccount(currentAccount);
+            await updateAccountData(currentAccount);
+            sendWalletToBackend(currentAccount);
           }
         } catch (err) {
-          console.error('Error checking connection:', err);
+          console.error('Error checking existing connection:', err);
         }
       }
     };
 
     checkConnection();
 
-    // Listen for account changes
-    const handleAccountsChanged = (accounts: string[]) => {
+    const handleAccountsChanged = async (accounts: string[]) => {
       if (accounts.length === 0) {
         setAccount(null);
         setBalance('0');
         setNetwork(null);
       } else {
-        setAccount(accounts[0]);
-        updateBalance(accounts[0]);
+        const newAccount = accounts[0];
+        setAccount(newAccount);
+        await updateAccountData(newAccount);
+        sendWalletToBackend(newAccount);
       }
     };
 
     const handleChainChanged = () => {
       if (account) {
-        updateBalance(account);
-        updateNetwork();
+        updateAccountData(account);
       }
     };
 
@@ -113,33 +117,53 @@ export const useWallet = () => {
     }
 
     return () => {
-      if (window.ethereum) {
+      if (window.ethereum?.removeListener) {
         window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
         window.ethereum.removeListener('chainChanged', handleChainChanged);
       }
     };
-  }, [account]);
+  }, [account, updateAccountData]);
 
   const connectWallet = async () => {
+    setError(null);
+
     if (!window.ethereum) {
-      setError('MetaMask is not installed');
+      setError('MetaMask is not installed. Please install the MetaMask browser extension.');
       return;
     }
 
     setIsConnecting(true);
-    setError(null);
 
     try {
-      const accounts = await window.ethereum.request({
-        method: 'eth_requestAccounts',
-      });
-      setAccount(accounts[0]);
-      updateBalance(accounts[0]);
-      updateNetwork();
-      setIsOpen(true);
-    } catch (err) {
-      setError('Failed to connect wallet');
-      console.error('Error connecting wallet:', err);
+      // Create BrowserProvider using ethers.js
+      const provider = new BrowserProvider(window.ethereum);
+      
+      // Request accounts using BrowserProvider
+      const accounts: string[] = await provider.send('eth_requestAccounts', []);
+      
+      if (accounts && accounts.length > 0) {
+        const connectedAccount = accounts[0];
+        setAccount(connectedAccount);
+        await updateAccountData(connectedAccount);
+        setIsOpen(true);
+
+        // Send address to backend API POST endpoint
+        await sendWalletToBackend(connectedAccount);
+      } else {
+        setError('No account returned from MetaMask.');
+      }
+    } catch (err: any) {
+      console.error('Error connecting MetaMask wallet:', err);
+      // Handle user rejection or missing extension explicitly
+      if (
+        err?.code === 4001 || 
+        err?.code === 'ACTION_REJECTED' ||
+        (typeof err?.message === 'string' && err.message.toLowerCase().includes('user rejected'))
+      ) {
+        setError('Connection request rejected by user.');
+      } else {
+        setError(err?.message || 'Failed to connect wallet.');
+      }
     } finally {
       setIsConnecting(false);
     }
@@ -153,7 +177,7 @@ export const useWallet = () => {
   };
 
   const toggleWalletMenu = () => {
-    setIsOpen(!isOpen);
+    setIsOpen(prev => !prev);
   };
 
   return {
@@ -168,4 +192,4 @@ export const useWallet = () => {
     disconnectWallet,
     toggleWalletMenu,
   };
-}; 
+};

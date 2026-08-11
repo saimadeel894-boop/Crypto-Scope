@@ -12,7 +12,7 @@ export const ThetaChainStatus: React.FC = () => {
     const checkConnection = async () => {
       setStatus('loading');
       try {
-        const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+        const provider = new ethers.JsonRpcProvider(RPC_URL);
         // Try to get the latest block number as a simple connectivity check
         await provider.getBlockNumber();
         setStatus('connected');

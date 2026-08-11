@@ -23,6 +23,7 @@ import React from "react"
 import { useWallet } from "@/hooks/useWallet"
 import { WalletPopup } from "./wallet-popup"
 import { signIn, signOut, useSession } from "next-auth/react"
+import { toast } from "sonner"
 
 export function Header() {
   const [search, setSearch] = useState("");
@@ -32,6 +33,12 @@ export function Header() {
   const router = useRouter();
   const { account, isConnecting, error, connectWallet, toggleWalletMenu, isOpen } = useWallet();
   const { data: session } = useSession();
+
+  React.useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
 
   const filtered = search.trim()
     ? cryptos.filter(c =>
