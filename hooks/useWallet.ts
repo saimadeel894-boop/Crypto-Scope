@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+'use client';
+
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { ethers, BrowserProvider, formatEther } from 'ethers';
 
 declare global {
@@ -12,7 +14,22 @@ interface NetworkInfo {
   name: string;
 }
 
-export const useWallet = () => {
+interface WalletContextType {
+  isMetaMaskInstalled: boolean;
+  account: string | null;
+  isConnecting: boolean;
+  error: string | null;
+  balance: string;
+  network: NetworkInfo | null;
+  isOpen: boolean;
+  connectWallet: () => Promise<void>;
+  disconnectWallet: () => void;
+  toggleWalletMenu: () => void;
+}
+
+const WalletContext = createContext<WalletContextType | undefined>(undefined);
+
+export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   const [isMetaMaskInstalled, setIsMetaMaskInstalled] = useState(false);
   const [account, setAccount] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -114,7 +131,6 @@ export const useWallet = () => {
 
     checkExistingConnection();
 
-    // Listen for provider initialization if injected asynchronously (e.g. mobile/Vercel)
     const handleInitialized = () => {
       checkEthereumProvider();
       checkExistingConnection();
@@ -140,7 +156,6 @@ export const useWallet = () => {
 
     const handleChainChanged = () => {
       if (window.ethereum) {
-        // Re-read accounts and network state on chain change
         window.location.reload();
       }
     };
@@ -189,7 +204,6 @@ export const useWallet = () => {
         await updateAccountData(connectedAccount);
         setIsOpen(true);
 
-        // Sync to backend DB asynchronously
         sendWalletToBackend(connectedAccount);
       } else {
         setError('No account returned from wallet.');
@@ -222,16 +236,30 @@ export const useWallet = () => {
     setIsOpen(prev => !prev);
   };
 
-  return {
-    isMetaMaskInstalled,
-    account,
-    isConnecting,
-    error,
-    balance,
-    network,
-    isOpen,
-    connectWallet,
-    disconnectWallet,
-    toggleWalletMenu,
-  };
+  return (
+    <WalletContext.Provider
+      value={{
+        isMetaMaskInstalled,
+        account,
+        isConnecting,
+        error,
+        balance,
+        network,
+        isOpen,
+        connectWallet,
+        disconnectWallet,
+        toggleWalletMenu,
+      }}
+    >
+      {children}
+    </WalletContext.Provider>
+  );
+};
+
+export const useWallet = () => {
+  const context = useContext(WalletContext);
+  if (!context) {
+    throw new Error('useWallet must be used within a WalletProvider');
+  }
+  return context;
 };

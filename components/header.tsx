@@ -94,16 +94,21 @@ export function Header() {
     }
   };
 
-  // Hide suggestions when clicking outside
+  const walletRef = useRef<HTMLDivElement>(null);
+
+  // Hide suggestions & wallet popup when clicking outside
   React.useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (inputRef.current && !inputRef.current.contains(e.target as Node)) {
         setShowSuggestions(false);
       }
+      if (isOpen && walletRef.current && !walletRef.current.contains(e.target as Node)) {
+        toggleWalletMenu();
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [isOpen, toggleWalletMenu]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -162,7 +167,7 @@ export function Header() {
           </div>
           
           <div className="flex items-center gap-1 md:gap-2">
-            <div className="relative">
+            <div className="relative" ref={walletRef}>
               <Button 
                 size="sm" 
                 variant="outline" 
@@ -182,6 +187,7 @@ export function Header() {
               </Button>
               {isOpen && <WalletPopup />}
             </div>
+
             <ThemeToggle />
             {session ? (
               <Button 
