@@ -2,14 +2,20 @@ import { Pool } from 'pg';
 
 let pool: Pool | null = null;
 
+export function isDbConfigured(): boolean {
+  return !!process.env.DATABASE_URL || !!process.env.POSTGRES_HOST;
+}
+
 export function getPool(): Pool {
   if (!pool) {
     const connectionString = process.env.DATABASE_URL || 
       `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD || 'postgres'}@${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'cryptoskope'}`;
 
+    const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+
     pool = new Pool({
       connectionString,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      ssl: isProduction ? { rejectUnauthorized: false } : false,
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
@@ -43,8 +49,16 @@ export async function initDb(): Promise<void> {
   }
 }
 
-export async function saveWalletAddress(address: string): Promise<{ id?: number; address: string; connected_at?: Date; last_seen_at?: Date }> {
+export async function saveWalletAddress(address: string): Promise<{ id?: number; address: string; connected_at?: Date; last_seen_at?: Date; dbStatus?: string }> {
   const normalizedAddress = address.toLowerCase();
+
+  if (!isDbConfigured() && process.env.VERCEL) {
+    console.warn('[DB Warning] DATABASE_URL environment variable is not configured on Vercel.');
+    return {
+      address: normalizedAddress,
+      dbStatus: 'unconfigured',
+    };
+  }
 
   try {
     await initDb();
@@ -66,3 +80,4 @@ export async function saveWalletAddress(address: string): Promise<{ id?: number;
     throw error;
   }
 }
+

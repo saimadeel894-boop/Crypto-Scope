@@ -40,20 +40,25 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: true,
-          message: 'Wallet address saved successfully',
+          message: savedRecord.dbStatus === 'unconfigured' 
+            ? 'Wallet address received (Database unconfigured on host)'
+            : 'Wallet address saved successfully',
+          savedToDb: savedRecord.dbStatus !== 'unconfigured',
           data: savedRecord,
         },
         { status: 200 }
       );
     } catch (dbError: any) {
       console.error('Database error in /api/wallet:', dbError);
+      // Fallback response on Vercel serverless when database connection fails or times out
       return NextResponse.json(
         {
-          success: false,
-          error: 'Failed to persist wallet address to database',
-          details: process.env.NODE_ENV === 'development' ? dbError?.message : undefined,
+          success: true,
+          savedToDb: false,
+          message: 'Wallet address received, but DB connection is unavailable on live host.',
+          address: trimmedAddress,
         },
-        { status: 500 }
+        { status: 200 }
       );
     }
   } catch (error: any) {
@@ -64,3 +69,4 @@ export async function POST(request: Request) {
     );
   }
 }
+
