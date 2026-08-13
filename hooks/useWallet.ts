@@ -108,18 +108,21 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const provider = new BrowserProvider(eth);
       
-      try {
-        const balanceWei = await provider.getBalance(address);
-        setBalance(parseFloat(formatEther(balanceWei)).toFixed(4));
-      } catch (bErr) {
-        console.warn('Balance fetch error:', bErr);
+      const [balanceResult, networkResult] = await Promise.allSettled([
+        provider.getBalance(address),
+        provider.getNetwork(),
+      ]);
+
+      if (balanceResult.status === 'fulfilled') {
+        setBalance(parseFloat(formatEther(balanceResult.value)).toFixed(4));
+      } else {
+        console.warn('Balance fetch error:', balanceResult.reason);
       }
 
-      try {
-        const networkObj = await provider.getNetwork();
-        setNetwork(getNetworkInfo(networkObj.chainId));
-      } catch (nErr) {
-        console.warn('Network fetch error:', nErr);
+      if (networkResult.status === 'fulfilled') {
+        setNetwork(getNetworkInfo(networkResult.value.chainId));
+      } else {
+        console.warn('Network fetch error:', networkResult.reason);
         setNetwork({ chainId: '1', name: 'Ethereum Mainnet', symbol: 'ETH' });
       }
     } catch (err) {
@@ -156,7 +159,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         if (accounts && accounts.length > 0) {
           const currentAccount = accounts[0];
           setAccount(currentAccount);
-          await updateAccountData(currentAccount);
+          updateAccountData(currentAccount);
           sendWalletToBackend(currentAccount);
         }
       } catch (err) {
@@ -184,7 +187,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
       } else {
         const newAccount = accounts[0];
         setAccount(newAccount);
-        await updateAccountData(newAccount);
+        updateAccountData(newAccount);
         sendWalletToBackend(newAccount);
       }
     };
@@ -245,8 +248,8 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
       if (accounts && accounts.length > 0) {
         const connectedAccount = accounts[0];
         setAccount(connectedAccount);
-        await updateAccountData(connectedAccount);
         setIsOpen(true);
+        updateAccountData(connectedAccount);
         sendWalletToBackend(connectedAccount);
       } else {
         setError('No account returned from wallet.');
