@@ -1,26 +1,38 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
+const hasGoogleAuth = !!(
+  googleClientId && 
+  googleClientSecret && 
+  !googleClientId.includes("your_google_client_id")
+);
+
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "cryptoskope_secret_key_default_32_characters_long",
   providers: [
-    ...(googleClientId && googleClientSecret
+    ...(hasGoogleAuth
       ? [
           GoogleProvider({
-            clientId: googleClientId,
-            clientSecret: googleClientSecret,
+            clientId: googleClientId!,
+            clientSecret: googleClientSecret!,
           }),
         ]
-      : [
-          // Fallback dummy GoogleProvider if credentials not set yet to prevent NextAuth initialization crash
-          GoogleProvider({
-            clientId: "dummy_google_client_id",
-            clientSecret: "dummy_google_client_secret",
-          }),
-        ]),
+      : []),
+    CredentialsProvider({
+      id: "credentials",
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize() {
+        return null;
+      },
+    }),
   ],
   pages: {
     signIn: "/login",
@@ -41,4 +53,5 @@ export const authOptions: NextAuthOptions = {
 const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };
+
  
