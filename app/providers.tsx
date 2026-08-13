@@ -5,11 +5,12 @@ import { WalletProvider } from "@/hooks/useWallet";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider>
+    <SessionProvider refetchOnWindowFocus={false}>
       <WalletProvider>
         {children}
       </WalletProvider>
     </SessionProvider>
   );
 }
+
  

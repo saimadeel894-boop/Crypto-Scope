@@ -52,6 +52,20 @@ export const authOptions: NextAuthOptions = {
 
 const handler = NextAuth(authOptions);
 
-export { handler as GET, handler as POST };
+async function authHandler(req: any, context: any) {
+  try {
+    const resolvedParams = context?.params ? await context.params : { nextauth: [] };
+    return await handler(req, { ...context, params: resolvedParams });
+  } catch (error) {
+    console.error("Error in NextAuth route handler:", error);
+    return new Response(JSON.stringify({ error: "Internal Server Error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
+export { authHandler as GET, authHandler as POST };
+
 
  
