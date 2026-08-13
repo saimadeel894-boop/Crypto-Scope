@@ -54,8 +54,16 @@ const handler = NextAuth(authOptions);
 
 async function authHandler(req: any, context: any) {
   try {
-    const resolvedParams = context?.params ? await context.params : { nextauth: [] };
-    return await handler(req, { ...context, params: resolvedParams });
+    const url = new URL(req.url);
+    if (!req.nextUrl) {
+      req.nextUrl = url;
+    }
+    const rawParams = context?.params ? await context.params : null;
+    const nextauth = (rawParams?.nextauth && rawParams.nextauth.length > 0)
+      ? rawParams.nextauth
+      : url.pathname.replace(/^\/api\/auth\/?/, '').split('/').filter(Boolean);
+
+    return await handler(req, { ...context, params: { nextauth } });
   } catch (error) {
     console.error("Error in NextAuth route handler:", error);
     return new Response(JSON.stringify({ error: "Internal Server Error" }), {
