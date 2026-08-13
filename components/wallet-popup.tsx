@@ -1,13 +1,14 @@
 import { Button } from "./ui/button"
-import { WalletIcon, CopyIcon, CheckIcon, ExternalLinkIcon, LogOutIcon, ChevronRightIcon, NetworkIcon } from "lucide-react"
+import { WalletIcon, CopyIcon, CheckIcon, ExternalLinkIcon, LogOutIcon, NetworkIcon, ArrowRightLeftIcon } from "lucide-react"
 import { useWallet } from "@/hooks/useWallet"
 import { useState } from "react"
 import { Separator } from "./ui/separator"
 import { toast } from "sonner"
 
 export function WalletPopup() {
-  const { account, balance, network, disconnectWallet } = useWallet();
+  const { account, balance, network, disconnectWallet, switchNetwork } = useWallet();
   const [copied, setCopied] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
 
   const getNetworkIcon = (chainId: string) => {
     switch (chainId) {
@@ -23,6 +24,8 @@ export function WalletPopup() {
         return '🟡'; // Mumbai
       case '361':
         return '🔵'; // Theta Mainnet
+      case '365':
+        return '🩵'; // Theta Testnet
       default:
         return '⚪';
     }
@@ -42,19 +45,34 @@ export function WalletPopup() {
   };
 
   const viewOnExplorer = () => {
-    if (account && network) {
-      const explorerUrl = network.chainId === '1' 
-        ? `https://etherscan.io/address/${account}`
-        : network.chainId === '361'
+    if (account) {
+      const explorerUrl = network?.chainId === '361' || network?.chainId === '365'
         ? `https://explorer.thetatoken.org/address/${account}`
-        : `https://sepolia.etherscan.io/address/${account}`;
+        : network?.chainId === '137'
+        ? `https://polygonscan.com/address/${account}`
+        : network?.chainId === '11155111'
+        ? `https://sepolia.etherscan.io/address/${account}`
+        : `https://etherscan.io/address/${account}`;
       window.open(explorerUrl, '_blank');
+    }
+  };
+
+  const handleNetworkSwitch = async (targetChainHex: string) => {
+    setIsSwitching(true);
+    try {
+      await switchNetwork(targetChainHex);
+      toast.success("Network switch requested!");
+    } catch (err) {
+      toast.error("Failed to switch network");
+    } finally {
+      setIsSwitching(false);
     }
   };
 
   if (!account) return null;
 
   const truncatedAddress = `${account.slice(0, 6)}...${account.slice(-4)}`;
+  const symbol = network?.symbol || 'ETH';
 
   return (
     <div className="absolute right-0 mt-2 w-80 rounded-xl border border-border bg-card p-4 shadow-xl z-50 text-card-foreground">
@@ -67,7 +85,7 @@ export function WalletPopup() {
             </div>
             <div className="flex flex-col">
               <span className="font-medium text-sm">Connected Wallet</span>
-              <span className="text-xs text-muted-foreground">MetaMask</span>
+              <span className="text-xs text-muted-foreground">Web3 Wallet</span>
             </div>
           </div>
           <Button
@@ -88,10 +106,11 @@ export function WalletPopup() {
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Network</span>
             <div className="flex items-center gap-2">
-              <div className={`h-2 w-2 rounded-full ${network?.chainId === '1' ? 'bg-green-500' : 'bg-blue-500'}`} />
+              <div className={`h-2 w-2 rounded-full ${network?.chainId === '361' ? 'bg-blue-500' : network?.chainId === '1' ? 'bg-green-500' : 'bg-purple-500'}`} />
               <span className="font-medium">{network?.name || 'Unknown'}</span>
             </div>
           </div>
+
           <div className="flex items-center justify-between bg-muted/50 rounded-lg p-2.5">
             <div className="flex items-center gap-2">
               <span className="text-base">{getNetworkIcon(network?.chainId || '')}</span>
@@ -102,11 +121,44 @@ export function WalletPopup() {
             </div>
             <NetworkIcon className="h-4 w-4 text-muted-foreground" />
           </div>
+
           <div className="flex items-center justify-between pt-1">
             <span className="text-muted-foreground">Balance</span>
             <div className="flex items-center gap-1.5 font-mono text-xs font-semibold">
-              <span>{balance} ETH</span>
+              <span>{balance} {symbol}</span>
             </div>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Network Switcher Section */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Switch Network</span>
+            <ArrowRightLeftIcon className="h-3 w-3" />
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <Button
+              variant={network?.chainId === '361' ? 'default' : 'outline'}
+              size="sm"
+              className="text-xs h-8 px-2 justify-start gap-1.5"
+              onClick={() => handleNetworkSwitch('0x169')}
+              disabled={isSwitching || network?.chainId === '361'}
+            >
+              <span>🔵</span>
+              <span className="truncate">Theta Mainnet</span>
+            </Button>
+            <Button
+              variant={network?.chainId === '1' ? 'default' : 'outline'}
+              size="sm"
+              className="text-xs h-8 px-2 justify-start gap-1.5"
+              onClick={() => handleNetworkSwitch('0x1')}
+              disabled={isSwitching || network?.chainId === '1'}
+            >
+              <span>🟢</span>
+              <span className="truncate">Ethereum</span>
+            </Button>
           </div>
         </div>
 

@@ -13,7 +13,8 @@ import {
   WalletIcon,
   LogOutIcon,
   GithubIcon,
-  TwitterIcon
+  TwitterIcon,
+  Loader2Icon
 } from "lucide-react"
 import { Input } from "./ui/input"
 import { useState, useRef } from "react"
@@ -170,13 +171,22 @@ export function Header() {
             <div className="relative" ref={walletRef}>
               <Button 
                 size="sm" 
-                variant="outline" 
-                className="rounded-full flex items-center gap-2 px-3"
+                variant={account ? "secondary" : "outline"} 
+                className="rounded-full flex items-center gap-2 px-3 transition-all"
                 onClick={handleWalletClick}
                 disabled={isConnecting}
               >
-                <WalletIcon className="h-5 w-5" />
-                <span>
+                {isConnecting ? (
+                  <Loader2Icon className="h-4 w-4 animate-spin text-primary" />
+                ) : account ? (
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                ) : (
+                  <WalletIcon className="h-4 w-4" />
+                )}
+                <span className="text-xs font-medium">
                   {isConnecting 
                     ? "Connecting..." 
                     : account 
@@ -214,4 +224,4 @@ export function Header() {
       </div>
     </header>
   )
-}
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { ethers, BrowserProvider, formatEther } from 'ethers';
+import { BrowserProvider, formatEther } from 'ethers';
 
 declare global {
   interface Window {
@@ -9,9 +9,10 @@ declare global {
   }
 }
 
-interface NetworkInfo {
+export interface NetworkInfo {
   chainId: string;
   name: string;
+  symbol: string;
 }
 
 interface WalletContextType {
@@ -25,7 +26,20 @@ interface WalletContextType {
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   toggleWalletMenu: () => void;
+  switchNetwork: (chainIdHex: string) => Promise<void>;
 }
+
+const THETA_MAINNET_PARAMS = {
+  chainId: '0x169', // 361
+  chainName: 'Theta Mainnet',
+  nativeCurrency: {
+    name: 'Theta Fuel',
+    symbol: 'TFUEL',
+    decimals: 18,
+  },
+  rpcUrls: ['https://eth-rpc-api.thetatoken.org/rpc'],
+  blockExplorerUrls: ['https://explorer.thetatoken.org'],
+};
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
@@ -38,19 +52,35 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   const [network, setNetwork] = useState<NetworkInfo | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
+  const getEthereumProvider = useCallback(() => {
+    if (typeof window === 'undefined') return undefined;
+    const eth = window.ethereum;
+    if (!eth) return undefined;
+
+    if (Array.isArray(eth.providers) && eth.providers.length > 0) {
+      const metaMaskProvider = eth.providers.find((p: any) => p.isMetaMask);
+      if (metaMaskProvider) return metaMaskProvider;
+      return eth.providers[0];
+    }
+    return eth;
+  }, []);
+
   const getNetworkInfo = (chainIdBigInt: bigint | string): NetworkInfo => {
     const chainId = chainIdBigInt.toString();
-    const networks: { [key: string]: string } = {
-      '1': 'Ethereum Mainnet',
-      '5': 'Goerli Testnet',
-      '11155111': 'Sepolia Testnet',
-      '137': 'Polygon Mainnet',
-      '80001': 'Mumbai Testnet',
-      '361': 'Theta Mainnet',
+    const networks: { [key: string]: { name: string; symbol: string } } = {
+      '1': { name: 'Ethereum Mainnet', symbol: 'ETH' },
+      '5': { name: 'Goerli Testnet', symbol: 'ETH' },
+      '11155111': { name: 'Sepolia Testnet', symbol: 'ETH' },
+      '137': { name: 'Polygon Mainnet', symbol: 'MATIC' },
+      '80001': { name: 'Mumbai Testnet', symbol: 'MATIC' },
+      '361': { name: 'Theta Mainnet', symbol: 'TFUEL' },
+      '365': { name: 'Theta Testnet', symbol: 'TFUEL' },
     };
+    const net = networks[chainId];
     return {
       chainId,
-      name: networks[chainId] || `Chain ID: ${chainId}`,
+      name: net ? net.name : `Chain ID: ${chainId}`,
+      symbol: net ? net.symbol : 'ETH',
     };
   };
 
@@ -73,9 +103,10 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const updateAccountData = useCallback(async (address: string) => {
-    if (typeof window === 'undefined' || !window.ethereum) return;
+    const eth = getEthereumProvider();
+    if (!eth) return;
     try {
-      const provider = new BrowserProvider(window.ethereum);
+      const provider = new BrowserProvider(eth);
       
       try {
         const balanceWei = await provider.getBalance(address);
@@ -89,33 +120,37 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         setNetwork(getNetworkInfo(networkObj.chainId));
       } catch (nErr) {
         console.warn('Network fetch error:', nErr);
-        setNetwork({ chainId: '1', name: 'Ethereum Mainnet' });
+        setNetwork({ chainId: '1', name: 'Ethereum Mainnet', symbol: 'ETH' });
       }
     } catch (err) {
       console.error('Error updating account data:', err);
     }
-  }, []);
+  }, [getEthereumProvider]);
 
   useEffect(() => {
     const checkEthereumProvider = () => {
-      const ethereum = typeof window !== 'undefined' ? window.ethereum : undefined;
-      const isInstalled = !!ethereum;
+      const eth = getEthereumProvider();
+      const isInstalled = !!eth;
       setIsMetaMaskInstalled(isInstalled);
-      return ethereum;
+      return eth;
     };
 
-    const ethereum = checkEthereumProvider();
+    let eth = checkEthereumProvider();
+
+    // Check again after short delays in case of delayed injection
+    const timer1 = setTimeout(() => { eth = checkEthereumProvider(); }, 500);
+    const timer2 = setTimeout(() => { eth = checkEthereumProvider(); }, 1500);
 
     const checkExistingConnection = async () => {
-      const eth = window.ethereum;
-      if (!eth) return;
+      const provider = getEthereumProvider();
+      if (!provider) return;
       try {
         let accounts: string[] = [];
-        if (typeof eth.request === 'function') {
-          accounts = await eth.request({ method: 'eth_accounts' });
+        if (typeof provider.request === 'function') {
+          accounts = await provider.request({ method: 'eth_accounts' });
         } else {
-          const provider = new BrowserProvider(eth);
-          accounts = await provider.send('eth_accounts', []);
+          const bp = new BrowserProvider(provider);
+          accounts = await bp.send('eth_accounts', []);
         }
 
         if (accounts && accounts.length > 0) {
@@ -155,34 +190,43 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const handleChainChanged = () => {
-      if (window.ethereum) {
+      const activeEth = getEthereumProvider();
+      if (activeEth) {
         window.location.reload();
       }
     };
 
-    if (ethereum && typeof ethereum.on === 'function') {
-      ethereum.on('accountsChanged', handleAccountsChanged);
-      ethereum.on('chainChanged', handleChainChanged);
+    const activeProvider = getEthereumProvider();
+    if (activeProvider && typeof activeProvider.on === 'function') {
+      activeProvider.on('accountsChanged', handleAccountsChanged);
+      activeProvider.on('chainChanged', handleChainChanged);
     }
 
     return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
       if (typeof window !== 'undefined') {
         window.removeEventListener('ethereum#initialized', handleInitialized);
       }
-      if (window.ethereum && typeof window.ethereum.removeListener === 'function') {
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-        window.ethereum.removeListener('chainChanged', handleChainChanged);
+      const p = getEthereumProvider();
+      if (p && typeof p.removeListener === 'function') {
+        p.removeListener('accountsChanged', handleAccountsChanged);
+        p.removeListener('chainChanged', handleChainChanged);
       }
     };
-  }, [updateAccountData]);
+  }, [getEthereumProvider, updateAccountData]);
 
   const connectWallet = async () => {
     setError(null);
 
-    const eth = typeof window !== 'undefined' ? window.ethereum : undefined;
+    const eth = getEthereumProvider();
 
     if (!eth) {
-      setError('No Web3 wallet extension found. Please install MetaMask or another Ethereum wallet extension.');
+      const noWeb3Msg = 'No Web3 wallet extension found. Please install MetaMask or another Ethereum wallet extension.';
+      setError(noWeb3Msg);
+      if (typeof window !== 'undefined') {
+        window.open('https://metamask.io/download/', '_blank');
+      }
       return;
     }
 
@@ -203,7 +247,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         setAccount(connectedAccount);
         await updateAccountData(connectedAccount);
         setIsOpen(true);
-
         sendWalletToBackend(connectedAccount);
       } else {
         setError('No account returned from wallet.');
@@ -217,11 +260,42 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         (typeof err?.message === 'string' && err.message.toLowerCase().includes('rejected'))
       ) {
         setError('Connection request rejected by user.');
+      } else if (err?.code === -32002) {
+        setError('Connection request is already pending in your wallet extension. Please check MetaMask.');
       } else {
         setError(err?.message || 'Failed to connect wallet.');
       }
     } finally {
       setIsConnecting(false);
+    }
+  };
+
+  const switchNetwork = async (chainIdHex: string) => {
+    const eth = getEthereumProvider();
+    if (!eth) {
+      setError('No Web3 wallet extension found.');
+      return;
+    }
+    try {
+      await eth.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: chainIdHex }],
+      });
+    } catch (switchError: any) {
+      if (switchError?.code === 4902 && chainIdHex === '0x169') {
+        try {
+          await eth.request({
+            method: 'wallet_addEthereumChain',
+            params: [THETA_MAINNET_PARAMS],
+          });
+        } catch (addError: any) {
+          console.error('Error adding Theta network:', addError);
+          setError('Failed to add Theta Mainnet to wallet.');
+        }
+      } else {
+        console.error('Error switching network:', switchError);
+        setError(switchError?.message || 'Failed to switch network.');
+      }
     }
   };
 
@@ -249,6 +323,7 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         connectWallet,
         disconnectWallet,
         toggleWalletMenu,
+        switchNetwork,
       }}
     >
       {children}
