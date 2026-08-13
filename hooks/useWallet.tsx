@@ -224,52 +224,51 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
 
     const eth = getEthereumProvider();
 
-    if (!eth) {
-      const noWeb3Msg = 'No Web3 wallet extension found. Please install MetaMask or another Ethereum wallet extension.';
-      setError(noWeb3Msg);
+    if (eth) {
+      setIsConnecting(true);
+
+      try {
+        let accounts: string[] = [];
+
+        if (typeof eth.request === 'function') {
+          accounts = await eth.request({ method: 'eth_requestAccounts' });
+        } else {
+          const provider = new BrowserProvider(eth);
+          accounts = await provider.send('eth_requestAccounts', []);
+        }
+
+        if (accounts && accounts.length > 0) {
+          const connectedAccount = accounts[0];
+          setAccount(connectedAccount);
+          setIsOpen(true);
+          updateAccountData(connectedAccount);
+          sendWalletToBackend(connectedAccount);
+        } else {
+          setError('No account returned from wallet.');
+        }
+      } catch (err: any) {
+        console.error('Error connecting wallet:', err);
+        if (
+          err?.code === 4001 || 
+          err?.code === 'ACTION_REJECTED' ||
+          (typeof err?.message === 'string' && err.message.toLowerCase().includes('user rejected')) ||
+          (typeof err?.message === 'string' && err.message.toLowerCase().includes('rejected'))
+        ) {
+          setError('Connection request rejected by user.');
+        } else if (err?.code === -32002) {
+          setError('Connection request is already pending in your wallet extension. Please check MetaMask.');
+        } else {
+          setError(err?.message || 'Failed to connect wallet.');
+        }
+      } finally {
+        setIsConnecting(false);
+      }
+    } else {
+      const msg = 'MetaMask not detected. Please install it to continue';
+      setError(msg);
       if (typeof window !== 'undefined') {
-        window.open('https://metamask.io/download/', '_blank');
+        alert(msg);
       }
-      return;
-    }
-
-    setIsConnecting(true);
-
-    try {
-      let accounts: string[] = [];
-
-      if (typeof eth.request === 'function') {
-        accounts = await eth.request({ method: 'eth_requestAccounts' });
-      } else {
-        const provider = new BrowserProvider(eth);
-        accounts = await provider.send('eth_requestAccounts', []);
-      }
-
-      if (accounts && accounts.length > 0) {
-        const connectedAccount = accounts[0];
-        setAccount(connectedAccount);
-        setIsOpen(true);
-        updateAccountData(connectedAccount);
-        sendWalletToBackend(connectedAccount);
-      } else {
-        setError('No account returned from wallet.');
-      }
-    } catch (err: any) {
-      console.error('Error connecting wallet:', err);
-      if (
-        err?.code === 4001 || 
-        err?.code === 'ACTION_REJECTED' ||
-        (typeof err?.message === 'string' && err.message.toLowerCase().includes('user rejected')) ||
-        (typeof err?.message === 'string' && err.message.toLowerCase().includes('rejected'))
-      ) {
-        setError('Connection request rejected by user.');
-      } else if (err?.code === -32002) {
-        setError('Connection request is already pending in your wallet extension. Please check MetaMask.');
-      } else {
-        setError(err?.message || 'Failed to connect wallet.');
-      }
-    } finally {
-      setIsConnecting(false);
     }
   };
 

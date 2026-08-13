@@ -11,7 +11,7 @@ const hasGoogleAuth = !!(
   !googleClientId.includes("your_google_client_id")
 );
 
-export const authOptions: NextAuthOptions = {
+const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "cryptoskope_secret_key_default_32_characters_long",
   providers: [
     ...(hasGoogleAuth
