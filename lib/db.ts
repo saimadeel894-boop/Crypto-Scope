@@ -74,10 +74,24 @@ export async function saveWalletAddress(address: string): Promise<{ id?: number;
     `;
 
     const result = await clientPool.query(query, [normalizedAddress]);
+    console.log(`[DB] INSERT query into connected_wallets table executed successfully for wallet address: ${normalizedAddress} (ID: ${result.rows[0]?.id})`);
     return result.rows[0];
   } catch (error) {
     console.error(`[DB Error] Failed to save wallet address ${address}:`, error);
     throw error;
   }
 }
+
+export async function getConnectedWallets(): Promise<any[]> {
+  try {
+    await initDb();
+    const clientPool = getPool();
+    const result = await clientPool.query('SELECT * FROM connected_wallets ORDER BY last_seen_at DESC;');
+    return result.rows;
+  } catch (error) {
+    console.error('[DB Error] Failed to fetch connected wallets:', error);
+    throw error;
+  }
+}
+
 

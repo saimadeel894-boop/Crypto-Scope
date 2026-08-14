@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isAddress } from 'ethers';
-import { saveWalletAddress } from '@/lib/db';
+import { saveWalletAddress, getConnectedWallets } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
@@ -34,23 +34,23 @@ export async function POST(request: Request) {
       );
     }
 
-    // Save to PostgreSQL with duplicate handling (ON CONFLICT DO UPDATE)
+    // Save to PostgreSQL connected_wallets table with ON CONFLICT DO UPDATE
     try {
       const savedRecord = await saveWalletAddress(trimmedAddress);
+      console.log(`[API /api/wallet] Wallet ${trimmedAddress} successfully saved/updated in connected_wallets table.`);
       return NextResponse.json(
         {
           success: true,
           message: savedRecord.dbStatus === 'unconfigured' 
             ? 'Wallet address received (Database unconfigured on host)'
-            : 'Wallet address saved successfully',
+            : 'Wallet address saved successfully to connected_wallets database table',
           savedToDb: savedRecord.dbStatus !== 'unconfigured',
           data: savedRecord,
         },
         { status: 200 }
       );
     } catch (dbError: any) {
-      console.error('Database error in /api/wallet:', dbError);
-      // Fallback response on Vercel serverless when database connection fails or times out
+      console.error('Database error in /api/wallet POST route:', dbError);
       return NextResponse.json(
         {
           success: true,
@@ -69,4 +69,22 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function GET() {
+  try {
+    const wallets = await getConnectedWallets();
+    return NextResponse.json({
+      success: true,
+      count: wallets.length,
+      data: wallets,
+    });
+  } catch (error: any) {
+    console.error('Error in /api/wallet GET route:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to retrieve connected wallets from database' },
+      { status: 500 }
+    );
+  }
+}
+
 
